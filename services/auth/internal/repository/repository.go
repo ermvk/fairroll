@@ -2,36 +2,36 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fairroll/pkg/logger"
 	"fairroll/pkg/models"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 )
 
 var ErrNotFound = errors.New("not found")
 
 type UserRepository struct {
-	db     *sql.DB
+	db     *pgx.Conn
 	logger *zap.Logger
 }
 
 type SessionRepository struct {
-	db     *sql.DB
+	db     *pgx.Conn
 	logger *zap.Logger
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
+func NewUserRepository(db *pgx.Conn) *UserRepository {
 	return &UserRepository{
 		db:     db,
 		logger: logger.GetZap(),
 	}
 }
 
-func NewSessionRepository(db *sql.DB) *SessionRepository {
+func NewSessionRepository(db *pgx.Conn) *SessionRepository {
 	return &SessionRepository{
 		db:     db,
 		logger: logger.GetZap(),
@@ -43,39 +43,32 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) (*models
 	r.logger.Info("Creating user", zap.String("email", user.Email), zap.String("username", user.Username))
 
 	query := `INSERT INTO users (email, username, password_hash, kys_status, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?)`
+	VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 
-	result, err := r.db.ExecContext(ctx, query,
+	err := r.db.QueryRow(ctx, query,
 		user.Email,
 		user.Username,
 		user.PasswordHash,
 		user.KYCStatus,
 		user.CreatedAt,
 		user.UpdatedAt,
-	)
+	).Scan(&user.ID)
 
 	if err != nil {
 		r.logger.Error("Failed to create user", zap.Error(err), zap.String("email", user.Email))
 		return nil, err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		r.logger.Error("Failed  to get last insert id", zap.Error(err))
-		return nil, err
-	}
-
-	user.ID = id
 	return user, nil
 }
 
 // Get user by email
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `SELECT id, email,  username, password_hash, kyc_status, created_at, updated_at
-	FROM users WHERE email = ?`
+	FROM users WHERE email = $1`
 
 	var user models.User
-	err := r.db.QueryRowContext(ctx, query, email).Scan(
+	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Username,
@@ -86,9 +79,10 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
 		}
+		return nil, err
 	}
 
 	return &user, nil
@@ -96,10 +90,10 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 
 func (r *UserRepository) GetByUsername(ctx context.Context, userName string) (*models.User, error) {
 	query := `SELECT id, email,  username, password_hash, kyc_status, created_at, updated_at
-	FROM users WHERE email = ?`
+	FROM users WHERE username = $1`
 
 	var user models.User
-	err := r.db.QueryRowContext(ctx, query, userName).Scan(
+	err := r.db.QueryRow(ctx, query, userName).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Username,
@@ -110,10 +104,11 @@ func (r *UserRepository) GetByUsername(ctx context.Context, userName string) (*m
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			r.logger.Error("Failed to get user by username", zap.Error(err), zap.String("username", userName))
-			return nil, err
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
 		}
+		r.logger.Error("Failed to get user by username", zap.Error(err), zap.String("username", userName))
+		return nil, err
 	}
 	return &user, nil
 }
@@ -121,10 +116,10 @@ func (r *UserRepository) GetByUsername(ctx context.Context, userName string) (*m
 func (r *UserRepository) GetByID(ctx context.Context, userID int64) (*models.User, error) {
 
 	query := `SELECT id, email, username, password_hash, kyc_status, created_at, updated_at
-		FROM users WHERE id = ?`
+		FROM users WHERE id = $1`
 
 	var user models.User
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+	err := r.db.QueryRow(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Username,
@@ -142,10 +137,10 @@ func (r *UserRepository) GetByID(ctx context.Context, userID int64) (*models.Use
 
 func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 	query := `UPDATE users
-	SET email = ?, username = ?, password_hash = ?, kyc_status = ?, updated_at = ?
-	WHERE id = ?`
+	SET email = $1, username = $2, password_hash = $3, kyc_status = $4, updated_at = $5
+	WHERE id = $6`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.Exec(ctx, query,
 		user.Email,
 		user.Username,
 		user.PasswordHash,
@@ -168,9 +163,9 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 	}
 
 	query := `INSERT INTO sessions (id, user_id, refresh_token, expires_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)`
+    VALUES ($1, $2, $3, $4, $5, $6)`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.Exec(ctx, query,
 		session.ID,
 		session.UserID,
 		session.RefreshToken,
@@ -181,6 +176,8 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 
 	if err != nil {
 		r.logger.Error("Failed to create session", zap.Error(err), zap.Int64("user_id", session.UserID))
+		return err
+
 	}
 
 	return nil
@@ -189,10 +186,10 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 // Get session by refresh token
 func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken string) (*models.Session, error) {
 	query := `SELECT id, user_id, refresh_token, expires_at, created_at, updated_at
-		FROM sessions WHERE refresh_token = ?`
+		FROM sessions WHERE refresh_token = $1`
 
 	var session models.Session
-	err := r.db.QueryRowContext(ctx, query, refreshToken).Scan(
+	err := r.db.QueryRow(ctx, query, refreshToken).Scan(
 		&session.ID,
 		&session.UserID,
 		&session.RefreshToken,
@@ -202,11 +199,11 @@ func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken 
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
-			r.logger.Error("Failed to get session by refresh token", zap.Error(err))
-			return nil, err
 		}
+		r.logger.Error("Failed to get session by refresh token", zap.Error(err))
+		return nil, err
 	}
 
 	if session.ExpiresAt.Before(time.Now()) {
@@ -217,9 +214,9 @@ func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken 
 
 // Delete session
 func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error {
-	query := `DELETE FROM sessions WHERE id = ?`
+	query := `DELETE FROM sessions WHERE id = $1`
 
-	_, err := r.db.ExecContext(ctx, query, sessionID)
+	_, err := r.db.Exec(ctx, query, sessionID)
 
 	if err != nil {
 		r.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID))
@@ -230,21 +227,15 @@ func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error 
 }
 
 // Delete session by  user ID
-func (r *UserRepository) DeleteByUserID(ctx context.Context, userID int64) error {
-	query := `DELETE  FROM sessions WHERE user_id = ?`
+func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+	query := `DELETE  FROM sessions WHERE user_id = $1`
 
-	result, err := r.db.ExecContext(ctx, query, userID)
+	_, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
 		r.logger.Error("Failed to delete all sessions", zap.Error(err), zap.Int64("user_id", userID))
 		return err
 	}
 
-	rowsAffected, err := result.RowsAffected()
-
-	if err != nil {
-		return err
-	}
-
-	r.logger.Info("all sessions  deleted", zap.Int64("user_id", userID), zap.Int64("sessions_deleted", rowsAffected))
+	r.logger.Info("all sessions  deleted", zap.Int64("user_id", userID))
 	return nil
 }

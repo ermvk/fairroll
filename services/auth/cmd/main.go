@@ -4,6 +4,9 @@ import (
 	"context"
 	"fairroll/pkg/config"
 	"fairroll/pkg/logger"
+	"fairroll/services/auth/internal/handler"
+	"fairroll/services/auth/internal/repository"
+	"fairroll/services/auth/internal/service"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,11 +14,18 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
+
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env found")
+	}
 
 	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
@@ -40,6 +50,34 @@ func main() {
 		"environment", cfg.Environment,
 	)
 
+	connStr := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
+		os.Getenv("DB_SSLMODE"),
+	)
+
+	conn, err := pgx.Connect(context.Background(), connStr)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	defer conn.Close(context.Background())
+
+	if err = conn.Ping(context.Background()); err != nil {
+		log.Fatalf("Failed to ping database %v", err)
+	}
+
+	logger.Info(ctx, "Successfully connected to database")
+
+	userRepo := repository.NewUserRepository(conn)
+	sessionRepo := repository.NewSessionRepository(conn)
+
+	authService := service.NewAuthService(userRepo, sessionRepo, cfg)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +86,8 @@ func main() {
 		fmt.Fprintf(w, `{ "status": "ok", "service": "auth", "timestamp":"%s"`, time.Now().Format(time.RFC3339))
 	})
 
+	authHandler := handler.NewAuthHandler(authService)
+	authHandler.RegisterRouters(mux)
 	// TODO: Connection to DB
 
 	addr := fmt.Sprintf(":%d", cfg.Service.Port)
