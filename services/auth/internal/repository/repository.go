@@ -42,7 +42,7 @@ func NewSessionRepository(db *pgx.Conn) *SessionRepository {
 func (r *UserRepository) Create(ctx context.Context, user *models.User) (*models.User, error) {
 	r.logger.Info("Creating user", zap.String("email", user.Email), zap.String("username", user.Username))
 
-	query := `INSERT INTO users (email, username, password_hash, kys_status, created_at, updated_at)
+	query := `INSERT INTO users (email, username, password_hash, kyc	_status, created_at, updated_at)
 	VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 
 	err := r.db.QueryRow(ctx, query,
