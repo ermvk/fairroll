@@ -50,15 +50,7 @@ func main() {
 		"environment", cfg.Environment,
 	)
 
-	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"),
-	)
+	connStr := cfg.Database.DSN
 
 	conn, err := pgx.Connect(context.Background(), connStr)
 	if err != nil {
