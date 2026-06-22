@@ -28,7 +28,7 @@ func (h *AuthHandler) RegisterRouters(mux *http.ServeMux) {
 // Register habdler for registration of new user
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
-	var req model.RegisterRequest
+	var req service.RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		middleware.RespondError(w, http.StatusBadRequest, "Invalid request body")
@@ -61,7 +61,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authResp, err := h.authService.Login(r.Context(), &req)
+	authResp, err := h.authService.Login(r.Context(), &service.LoginRequest{
+		Email:    req.Email,
+		Password: req.Password,
+	})
 	if err != nil {
 		middleware.RespondError(w, http.StatusUnauthorized, err.Error())
 		return
@@ -86,6 +89,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	middleware.RespondSuccess(w, http.StatusOK, authResp)
 }
+
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	middleware.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "handler ME still not implemented",

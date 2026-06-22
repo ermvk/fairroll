@@ -54,7 +54,7 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 
 	cfg := &Config{
 		Service: ServiceConfig{
-			Name:    getEnv("SERVICE_NAME", "clauzino-service"),
+			Name:    getEnv("SERVICE_NAME", "fairrol-service"),
 			Version: getEnv("SERVICE_VERSION", "1.0.0"),
 			Port:    getEnvInt("SERVICE_PORT", 8080),
 		},
@@ -64,7 +64,7 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 		},
 		Environment: getEnv("ENVIRONMENT", "development"),
 		Database: DatabaseConfig{
-			DSN: getEnv("DATABASE_DSN", "postgres://localhost:5432/clauzino"),
+			DSN: getEnv("DATABASE_DSN", "postgres://localhost:5432/fairroll"),
 		},
 		JWT: JWTConfig{
 			SecretKey:       getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
@@ -75,7 +75,7 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 		RefreshTokenTTL: time.Duration(getEnvInt64("JWT_REFRESH_TTL", 604800)) * time.Second,
 		Kafka: KafkaConfig{
 			Brokers: []string{getEnv("KAFKA_BROKERS", "localhost:9092")},
-			Topic:   getEnv("KAFKA_TOPIC", "clauzino-events"),
+			Topic:   getEnv("KAFKA_TOPIC", "fairrol-events"),
 		},
 		Redis: RedisConfig{
 			Host: getEnv("REDIS_HOST", "localhost"),
