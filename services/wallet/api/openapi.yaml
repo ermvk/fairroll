@@ -1,0 +1,300 @@
+openapi: 3.0.3
+info:
+  title: Wallet Service API
+  description: Double-entry ledger wallet service for fairroll platform
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8081
+    description: Local development
+
+tags:
+  - name: accounts
+    description: User account/balance management
+  - name: transactions
+    description: Money movement operations
+
+paths:
+  /wallet/accounts/{userId}:
+    get:
+      tags: [accounts]
+      summary: Get user's account balance
+      operationId: getAccount
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+            default: USD
+      responses:
+        '200':
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /wallet/deposit:
+    post:
+      tags: [transactions]
+      summary: Deposit funds into user account
+      operationId: deposit
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Client-generated UUID to prevent duplicate processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequest'
+      responses:
+        '201':
+          description: Deposit completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '409':
+          description: Idempotency key conflict (already processed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error (e.g. negative amount)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /wallet/withdraw:
+    post:
+      tags: [transactions]
+      summary: Withdraw funds from user account
+      operationId: withdraw
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawRequest'
+      responses:
+        '201':
+          description: Withdrawal completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '402':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /wallet/transactions/{userId}:
+    get:
+      tags: [transactions]
+      summary: Get transaction history for user
+      operationId: listTransactions
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TransactionResponse'
+                  total:
+                    type: integer
+
+  /wallet/transfer:
+    post:
+      tags: [transactions]
+      summary: Internal transfer between accounts (e.g. bet placement, payout)
+      operationId: transfer
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '201':
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '402':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    AccountResponse:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        balance:
+          type: string
+          format: decimal
+          example: "1250.75"
+          description: Balance as decimal string (supports fiat 2dp and crypto up to 18dp)
+        accountType:
+          type: string
+
+    DepositRequest:
+      type: object
+      required: [userId, amount, currency]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        amount:
+          type: string
+          format: decimal
+          example: "150.50"
+          description: Amount as decimal string (supports fiat 2dp and crypto up to 18dp), must be positive
+        currency:
+          type: string
+          default: USD
+        source:
+          type: string
+          description: External payment reference (PSP transaction id)
+
+    WithdrawRequest:
+      type: object
+      required: [userId, amount, currency]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        amount:
+          type: string
+          format: decimal
+          example: "150.50"
+          description: Amount as decimal string (supports fiat 2dp and crypto up to 18dp)
+        currency:
+          type: string
+          default: USD
+
+    TransferRequest:
+      type: object
+      required: [fromUserId, toAccountType, amount, currency, reason]
+      properties:
+        fromUserId:
+          type: integer
+          format: int64
+        toAccountType:
+          type: string
+          description: e.g. 'system_house' for bet placement
+        amount:
+          type: string
+          format: decimal
+          example: "150.50"
+          description: Amount as decimal string (supports fiat 2dp and crypto up to 18dp)
+        currency:
+          type: string
+          default: USD
+        reason:
+          type: string
+          description: e.g. 'bet_placed', 'bet_payout'
+
+    TransactionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [deposit, withdrawal, transfer, bet, payout]
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        amount:
+          type: string
+          format: decimal
+          example: "150.50"
+          description: Amount as decimal string (supports fiat 2dp and crypto up to 18dp)
+        currency:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time

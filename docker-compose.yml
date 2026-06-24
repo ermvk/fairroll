@@ -1,14 +1,30 @@
 services:
-  postgres:
+  postgres-auth:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: fairroll
       POSTGRES_PASSWORD: fairroll
-      POSTGRES_DB: fairroll
+      POSTGRES_DB: fairroll_auth
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U fairroll" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-wallet:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fairroll
+      POSTGRES_PASSWORD: fairroll
+      POSTGRES_DB: fairroll_wallet
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_wallet_data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U fairroll" ]
       interval: 5s
@@ -22,10 +38,27 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_DSN: postgres://fairroll:fairroll@postgres:5432/fairroll?sslmode=disable
+      SERVICE_NAME: auth-service
+      SERVICE_PORT: "8080"
+      DATABASE_DSN: postgres://fairroll:fairroll@postgres-auth:5432/fairroll_auth?sslmode=disable
     depends_on:
-      postgres:
+      postgres-auth:
+        condition: service_healthy
+
+  wallet:
+    build:
+      context: .
+      dockerfile: services/wallet/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      SERVICE_NAME: wallet-service
+      SERVICE_PORT: "8081"
+      DATABASE_DSN: postgres://fairroll:fairroll@postgres-wallet:5432/fairroll_wallet?sslmode=disable
+    depends_on:
+      postgres-wallet:
         condition: service_healthy
 
 volumes:
-  postgres_data:
+  postgres_auth_data:
+  postgres_wallet_data:
