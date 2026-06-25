@@ -5,10 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"fairroll/services/wallet/internal/repository"
-
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+
+	"fairroll/services/wallet/internal/repository"
 )
 
 var (
@@ -201,4 +201,8 @@ func (s *WalletService) WithDraw(ctx context.Context, req WithdrawRequest) (*rep
 
 func (s *WalletService) ListTransactions(ctx context.Context, userID uuid.UUID, limit, offset int) ([]repository.Transaction, error) {
 	return s.repo.ListTransactionsByUserID(ctx, userID, limit, offset)
+}
+
+func (s *WalletService) CreateAccountForUser(ctx context.Context, userID uuid.UUID, currency string) (*repository.Account, error) {
+	return s.repo.GetOrCreateAccount(ctx, userID, currency, string(UserMainAccountType))
 }

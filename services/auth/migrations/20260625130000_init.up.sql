@@ -19,7 +19,7 @@ CREATE TABLE sessions (
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-CREATE TABLE outbox_events (
+CREATE TABLE IF NOT EXISTS outbox_events (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     aggregate_id UUID NOT NULL,
     event_type   VARCHAR(100) NOT NULL,
