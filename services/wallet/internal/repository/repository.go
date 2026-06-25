@@ -16,7 +16,7 @@ var ErrInsufficientFunds = errors.New("insufficient funds")
 
 type Account struct {
 	ID          int64
-	UserID      int64
+	UserID      uuid.UUID
 	Currency    string
 	AccountType string
 	CreatedAt   time.Time
@@ -49,7 +49,7 @@ func NewWalletRepository(db *pgx.Conn) *WalletRepository {
 	}
 }
 
-func (r *WalletRepository) GetOrCreateAccount(ctx context.Context, userID int64, currency, accountType string) (*Account, error) {
+func (r *WalletRepository) GetOrCreateAccount(ctx context.Context, userID uuid.UUID, currency, accountType string) (*Account, error) {
 	acc, err := r.GetAccountByUserID(ctx, userID, currency)
 	if err == nil {
 		return acc, nil
@@ -76,7 +76,7 @@ func (r *WalletRepository) GetOrCreateAccount(ctx context.Context, userID int64,
 	return acc, nil
 }
 
-func (r *WalletRepository) GetAccountByUserID(ctx context.Context, userID int64, currency string) (*Account, error) {
+func (r *WalletRepository) GetAccountByUserID(ctx context.Context, userID uuid.UUID, currency string) (*Account, error) {
 	query := `SELECT id, user_id, currency, account_type, created_at
 		FROM accounts WHERE user_id = $1 AND currency = $2`
 	var acc Account
@@ -164,7 +164,7 @@ func (r *WalletRepository) GetTransactionByIdempotencyKey(ctx context.Context, k
 	return &tx, nil
 }
 
-func (r *WalletRepository) ListTransactionsByUserID(ctx context.Context, userID int64, limit, offset int) ([]Transaction, error) {
+func (r *WalletRepository) ListTransactionsByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Transaction, error) {
 	query := `SELECT DISTINCT t.id, t.idempotency_key, t.type, t.status, t.created_at
 		FROM transactions t
 		JOIN ledger_entries le ON le.transaction_id = t.id

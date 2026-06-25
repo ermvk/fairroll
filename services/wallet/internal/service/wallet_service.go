@@ -19,9 +19,11 @@ var (
 type AccountType string
 
 const (
-	SystemHouseAccountType AccountType = "system_house"
-	UserMainAccountType    AccountType = "user_main"
+	SettlementAccountType AccountType = "settlement"
+	UserMainAccountType   AccountType = "user_main"
 )
+
+var settlementAccountID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 type Direction string
 
@@ -55,7 +57,7 @@ func NewWalletService(repo *repository.WalletRepository) *WalletService {
 }
 
 type DepositRequest struct {
-	UserID         int64
+	UserID         uuid.UUID
 	Amount         decimal.Decimal
 	Currency       string
 	Source         string
@@ -63,13 +65,13 @@ type DepositRequest struct {
 }
 
 type WithdrawRequest struct {
-	UserID         int64
+	UserID         uuid.UUID
 	Amount         decimal.Decimal
 	Currency       string
 	IdempotencyKey string
 }
 
-func (s *WalletService) GetBalance(ctx context.Context, userID int64, currency string) (decimal.Decimal, error) {
+func (s *WalletService) GetBalance(ctx context.Context, userID uuid.UUID, currency string) (decimal.Decimal, error) {
 	acc, err := s.repo.GetAccountByUserID(ctx, userID, currency)
 	if err != nil {
 		return decimal.Zero, err
@@ -92,7 +94,7 @@ func (s *WalletService) Deposit(ctx context.Context, req DepositRequest) (*repos
 		return nil, false, err
 	}
 
-	houseAcc, err := s.repo.GetOrCreateAccount(ctx, 0, req.Currency, string(SystemHouseAccountType))
+	settlementAcc, err := s.repo.GetOrCreateAccount(ctx, settlementAccountID, req.Currency, string(SettlementAccountType))
 	if err != nil {
 		return nil, false, err
 	}
@@ -109,7 +111,7 @@ func (s *WalletService) Deposit(ctx context.Context, req DepositRequest) (*repos
 	entries := []repository.LedgerEntry{
 		{
 			TransactionID: tx.ID,
-			AccountID:     houseAcc.ID,
+			AccountID:     settlementAcc.ID,
 			Direction:     string(DirectionDebit),
 			Amount:        req.Amount,
 			CreatedAt:     now,
@@ -125,7 +127,6 @@ func (s *WalletService) Deposit(ctx context.Context, req DepositRequest) (*repos
 
 	if err := s.repo.CreateTransactionWithEntries(ctx, tx, entries); err != nil {
 		return nil, false, err
-
 	}
 
 	return tx, false, nil
@@ -159,7 +160,7 @@ func (s *WalletService) WithDraw(ctx context.Context, req WithdrawRequest) (*rep
 		return nil, false, repository.ErrInsufficientFunds
 	}
 
-	houseAcc, err := s.repo.GetOrCreateAccount(ctx, 0, req.Currency, string(SystemHouseAccountType))
+	settlementAcc, err := s.repo.GetOrCreateAccount(ctx, settlementAccountID, req.Currency, string(SettlementAccountType))
 	if err != nil {
 		return nil, false, err
 	}
@@ -184,7 +185,7 @@ func (s *WalletService) WithDraw(ctx context.Context, req WithdrawRequest) (*rep
 		},
 		{
 			TransactionID: tx.ID,
-			AccountID:     houseAcc.ID,
+			AccountID:     settlementAcc.ID,
 			Direction:     string(DirectionCredit),
 			Amount:        req.Amount,
 			CreatedAt:     now,
@@ -198,6 +199,6 @@ func (s *WalletService) WithDraw(ctx context.Context, req WithdrawRequest) (*rep
 	return tx, false, nil
 }
 
-func (s *WalletService) ListTransactions(ctx context.Context, userID int64, limit, offset int) ([]repository.Transaction, error) {
+func (s *WalletService) ListTransactions(ctx context.Context, userID uuid.UUID, limit, offset int) ([]repository.Transaction, error) {
 	return s.repo.ListTransactionsByUserID(ctx, userID, limit, offset)
 }

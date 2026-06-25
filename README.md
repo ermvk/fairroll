@@ -7,7 +7,7 @@ Event-driven fintech platform in Go
 
 ## Tech stack
 
-Go · PostgreSQL
+Go · PostgreSQL · Kafka · To be continued ...
 
 
 
