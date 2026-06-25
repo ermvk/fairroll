@@ -13,15 +13,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
+	"github.com/twmb/franz-go/pkg/kgo"
+
 	"fairroll/pkg/config"
 	"fairroll/pkg/logger"
+	"fairroll/services/wallet/internal/consumer"
 	"fairroll/services/wallet/internal/handler"
 	"fairroll/services/wallet/internal/model"
 	"fairroll/services/wallet/internal/repository"
 	"fairroll/services/wallet/internal/service"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -72,6 +74,24 @@ func main() {
 	walletService := service.NewWalletService(walletRepo)
 	walletHandler := handler.NewWalletHandler(walletService)
 
+	kafkaClient, err := kgo.NewClient(kgo.SeedBrokers(cfg.Kafka.Brokers...),
+		kgo.ConsumeTopics("user.events"),
+		kgo.ConsumerGroup("wallet-service"),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create kafka client: %v", err)
+	}
+	defer kafkaClient.Close()
+
+	userEventsConsumer := consumer.NewUserEventsConsumer(kafkaClient, walletService)
+
+	consumerCtx, consumerCanсel := context.WithCancel(context.Background())
+	defer consumerCanсel()
+
+	go userEventsConsumer.Run(consumerCtx)
+
+	logger.Info(ctx, "User events consumer started", "topic", "user.events")
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +121,8 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigChan
 	logger.Info(ctx, "Shutdown signal recieved", "signal", sig.String())
+
+	consumerCanсel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()

@@ -2,10 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+
 	"fairroll/pkg/middleware"
 	"fairroll/services/auth/internal/model"
 	"fairroll/services/auth/internal/service"
-	"net/http"
 )
 
 type AuthHandler struct {
@@ -27,7 +28,6 @@ func (h *AuthHandler) RegisterRouters(mux *http.ServeMux) {
 
 // Register habdler for registration of new user
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-
 	var req service.RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -36,7 +36,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.authService.Register(r.Context(), &req)
-
 	if err != nil {
 		middleware.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -44,32 +43,29 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	middleware.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
 		"user": &model.UserResponse{
-			ID:        user.ID,
-			Email:     user.Email,
-			UserName:  user.Username,
-			KYCstatus: user.KYCStatus,
-			CreatedAt: user.CreatedAt,
+			Id:        &user.ID,
+			Email:     &user.Email,
+			UserName:  &user.Username,
+			KycStatus: &user.KYCStatus,
+			CreatedAt: &user.CreatedAt,
 		},
 	})
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req model.LoginRequest
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		middleware.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-
 	authResp, err := h.authService.Login(r.Context(), &service.LoginRequest{
-		Email:    req.Email,
+		Email:    string(req.Email),
 		Password: req.Password,
 	})
 	if err != nil {
 		middleware.RespondError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
-
 	middleware.RespondSuccess(w, http.StatusOK, authResp)
 }
 

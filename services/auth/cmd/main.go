@@ -2,11 +2,6 @@ package main
 
 import (
 	"context"
-	"fairroll/pkg/config"
-	"fairroll/pkg/logger"
-	"fairroll/services/auth/internal/handler"
-	"fairroll/services/auth/internal/repository"
-	"fairroll/services/auth/internal/service"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +12,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+	"github.com/twmb/franz-go/pkg/kgo"
+
+	"fairroll/pkg/config"
+	"fairroll/pkg/logger"
+	"fairroll/pkg/outbox"
+	"fairroll/services/auth/internal/handler"
+	"fairroll/services/auth/internal/repository"
+	"fairroll/services/auth/internal/service"
 )
 
 func main() {
@@ -65,6 +68,22 @@ func main() {
 
 	logger.Info(ctx, "Successfully connected to database")
 
+	kafkaClient, err := kgo.NewClient(
+		kgo.SeedBrokers(cfg.Kafka.Brokers...))
+	if err != nil {
+		log.Fatalf("Failed to create kafka client: %v", err)
+	}
+
+	defer kafkaClient.Close()
+
+	relay := outbox.NewRelay(conn, kafkaClient, "user.events")
+
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	defer relayCancel()
+
+	go relay.Run(relayCtx)
+	logger.Info(ctx, "Outbox relay started", "topic", "user.events")
+
 	userRepo := repository.NewUserRepository(conn)
 	sessionRepo := repository.NewSessionRepository(conn)
 
@@ -108,6 +127,8 @@ func main() {
 	logger.Info(ctx, "Shutdown signal recieved",
 		"signal", sig.String(),
 	)
+
+	relayCancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()

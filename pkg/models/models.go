@@ -1,11 +1,14 @@
+// Package models Shared base models for all services
 package models
 
-import "time"
+import (
+	"time"
 
-// Shared base models for all services
+	"github.com/google/uuid"
+)
 
 type User struct {
-	ID           int64     `json:"id"`
+	ID           uuid.UUID `json:"id"`
 	Email        string    `json:"email"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
@@ -15,8 +18,8 @@ type User struct {
 }
 
 type Session struct {
-	ID           string    `json:"id"`
-	UserID       int64     `json:"user_id"`
+	ID           uuid.UUID `json:"id"`
+	UserID       uuid.UUID `json:"user_id"`
 	RefreshToken string    `json:"-"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	CreatedAt    time.Time `json:"created_at"`

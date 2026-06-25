@@ -10,6 +10,8 @@ import (
 	"fairroll/services/wallet/internal/repository"
 	"fairroll/services/wallet/internal/service"
 
+	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -24,13 +26,13 @@ func NewWalletHandler(walletService *service.WalletService) *WalletHandler {
 }
 
 // GetAccount handles GET /wallet/accounts/{userId}
-func (h *WalletHandler) GetAccount(w http.ResponseWriter, r *http.Request, userId int64, params model.GetAccountParams) {
+func (h *WalletHandler) GetAccount(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params model.GetAccountParams) {
 	currency := "USD"
 	if params.Currency != nil {
 		currency = *params.Currency
 	}
 
-	balance, err := h.walletService.GetBalance(r.Context(), userId, currency)
+	balance, err := h.walletService.GetBalance(r.Context(), uuid.UUID(userId), currency)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			respondError(w, http.StatusNotFound, err.Error())
@@ -70,7 +72,7 @@ func (h *WalletHandler) Deposit(w http.ResponseWriter, r *http.Request, params m
 	// tx — final transaction
 	// wasReplay — true if already processed
 	tx, wasReplay, err := h.walletService.Deposit(r.Context(), service.DepositRequest{
-		UserID:         req.UserId,
+		UserID:         uuid.UUID(req.UserId),
 		Amount:         amount,
 		Currency:       req.Currency,
 		Source:         source,
@@ -104,7 +106,7 @@ func (h *WalletHandler) Withdraw(w http.ResponseWriter, r *http.Request, params 
 	}
 
 	tx, wasReplay, err := h.walletService.WithDraw(r.Context(), service.WithdrawRequest{
-		UserID:         req.UserId,
+		UserID:         uuid.UUID(req.UserId),
 		Amount:         amount,
 		Currency:       req.Currency,
 		IdempotencyKey: params.IdempotencyKey,
@@ -127,7 +129,7 @@ func (h *WalletHandler) Transfer(w http.ResponseWriter, r *http.Request, params 
 }
 
 // ListTransactions handles GET /wallet/transactions/{userId}
-func (h *WalletHandler) ListTransactions(w http.ResponseWriter, r *http.Request, userID int64, params model.ListTransactionsParams) {
+func (h *WalletHandler) ListTransactions(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params model.ListTransactionsParams) {
 	limit := 20
 	if params.Limit != nil {
 		limit = *params.Limit
@@ -138,7 +140,7 @@ func (h *WalletHandler) ListTransactions(w http.ResponseWriter, r *http.Request,
 		offset = *params.Offset
 	}
 
-	txs, err := h.walletService.ListTransactions(r.Context(), userID, limit, offset)
+	txs, err := h.walletService.ListTransactions(r.Context(), uuid.UUID(userId), limit, offset)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -155,12 +157,12 @@ func (h *WalletHandler) ListTransactions(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-//helper fnx
+// helper fnx
 
 func toTransactionResponse(tx *repository.Transaction) model.TransactionResponse {
 	status := model.TransactionResponseStatus(tx.Status)
 	txType := model.TransactionResponseType(tx.Type)
-	id := tx.ID
+	id := openapi_types.UUID(tx.ID)
 
 	return model.TransactionResponse{
 		Id:        &id,

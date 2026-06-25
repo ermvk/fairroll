@@ -38,9 +38,7 @@ func (e TransactionResponseStatus) Valid() bool {
 
 // Defines values for TransactionResponseType.
 const (
-	Bet        TransactionResponseType = "bet"
 	Deposit    TransactionResponseType = "deposit"
-	Payout     TransactionResponseType = "payout"
 	Transfer   TransactionResponseType = "transfer"
 	Withdrawal TransactionResponseType = "withdrawal"
 )
@@ -48,11 +46,7 @@ const (
 // Valid indicates whether the value is a known member of the TransactionResponseType enum.
 func (e TransactionResponseType) Valid() bool {
 	switch e {
-	case Bet:
-		return true
 	case Deposit:
-		return true
-	case Payout:
 		return true
 	case Transfer:
 		return true
@@ -68,9 +62,9 @@ type AccountResponse struct {
 	AccountType *string `json:"accountType,omitempty"`
 
 	// Balance Balance as decimal string (supports fiat 2dp and crypto up to 18dp)
-	Balance  *string `json:"balance,omitempty"`
-	Currency *string `json:"currency,omitempty"`
-	UserId   *int64  `json:"userId,omitempty"`
+	Balance  *string             `json:"balance,omitempty"`
+	Currency *string             `json:"currency,omitempty"`
+	UserId   *openapi_types.UUID `json:"userId,omitempty"`
 }
 
 // DepositRequest defines model for DepositRequest.
@@ -80,8 +74,8 @@ type DepositRequest struct {
 	Currency string `json:"currency"`
 
 	// Source External payment reference (PSP transaction id)
-	Source *string `json:"source,omitempty"`
-	UserId int64   `json:"userId"`
+	Source *string            `json:"source,omitempty"`
+	UserId openapi_types.UUID `json:"userId"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -111,23 +105,23 @@ type TransactionResponseType string
 // TransferRequest defines model for TransferRequest.
 type TransferRequest struct {
 	// Amount Amount as decimal string (supports fiat 2dp and crypto up to 18dp)
-	Amount     string `json:"amount"`
-	Currency   string `json:"currency"`
-	FromUserId int64  `json:"fromUserId"`
+	Amount     string             `json:"amount"`
+	Currency   string             `json:"currency"`
+	FromUserId openapi_types.UUID `json:"fromUserId"`
 
-	// Reason e.g. 'bet_placed', 'bet_payout'
+	// Reason e.g. 'fee_settlement', 'reward_credit'
 	Reason string `json:"reason"`
 
-	// ToAccountType e.g. 'system_house' for bet placement
+	// ToAccountType Destination ledger account type, e.g. 'system_fees' or 'system_rewards'
 	ToAccountType string `json:"toAccountType"`
 }
 
 // WithdrawRequest defines model for WithdrawRequest.
 type WithdrawRequest struct {
 	// Amount Amount as decimal string (supports fiat 2dp and crypto up to 18dp)
-	Amount   string `json:"amount"`
-	Currency string `json:"currency"`
-	UserId   int64  `json:"userId"`
+	Amount   string             `json:"amount"`
+	Currency string             `json:"currency"`
+	UserId   openapi_types.UUID `json:"userId"`
 }
 
 // GetAccountParams defines parameters for GetAccount.
@@ -170,14 +164,14 @@ type WithdrawJSONRequestBody = WithdrawRequest
 type ServerInterface interface {
 	// Get user's account balance
 	// (GET /wallet/accounts/{userId})
-	GetAccount(w http.ResponseWriter, r *http.Request, userId int64, params GetAccountParams)
+	GetAccount(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params GetAccountParams)
 	// Deposit funds into user account
 	// (POST /wallet/deposit)
 	Deposit(w http.ResponseWriter, r *http.Request, params DepositParams)
 	// Get transaction history for user
 	// (GET /wallet/transactions/{userId})
-	ListTransactions(w http.ResponseWriter, r *http.Request, userId int64, params ListTransactionsParams)
-	// Internal transfer between accounts (e.g. bet placement, payout)
+	ListTransactions(w http.ResponseWriter, r *http.Request, userId openapi_types.UUID, params ListTransactionsParams)
+	// Internal transfer between accounts (e.g. fee settlement, reward credit)
 	// (POST /wallet/transfer)
 	Transfer(w http.ResponseWriter, r *http.Request, params TransferParams)
 	// Withdraw funds from user account
@@ -201,9 +195,9 @@ func (siw *ServerInterfaceWrapper) GetAccount(w http.ResponseWriter, r *http.Req
 	_ = err
 
 	// ------------- Path parameter "userId" -------------
-	var userId int64
+	var userId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
 		return
@@ -288,9 +282,9 @@ func (siw *ServerInterfaceWrapper) ListTransactions(w http.ResponseWriter, r *ht
 	_ = err
 
 	// ------------- Path parameter "userId" -------------
-	var userId int64
+	var userId openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
 		return

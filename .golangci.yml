@@ -96,7 +96,7 @@ formatters:
       extra-rules: true
     gci:
       sections:
-        - Standard
-        - Default
-        - Prefix(github.com/ermvk/hexagon)
+      - Standard
+      - Default
+      - Prefix(fairroll)
       no-inline-comments: false

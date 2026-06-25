@@ -4,17 +4,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"fairroll/pkg/config"
-	"fairroll/pkg/errors"
-	"fairroll/pkg/logger"
-	"fairroll/pkg/models"
-	"fairroll/services/auth/internal/repository"
+	"encoding/json"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+
+	"fairroll/pkg/config"
+	"fairroll/pkg/errors"
+	"fairroll/pkg/logger"
+	"fairroll/pkg/models"
+	"fairroll/services/auth/internal/repository"
 )
 
 type AuthService struct {
@@ -22,6 +24,12 @@ type AuthService struct {
 	sessionRepo *repository.SessionRepository
 	jwtConfig   *config.JWTConfig
 	logger      *zap.Logger
+}
+
+type UserRegisteredEvent struct {
+	UserID   string `json:"user_id"`
+	Email    string `json:"email"`
+	UserName string `json:"user_name"`
 }
 
 func NewAuthService(userRepo *repository.UserRepository, sessionRepo *repository.SessionRepository, cfg *config.Config) *AuthService {
@@ -66,13 +74,24 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*mode
 		UpdatedAt:    time.Now(),
 	}
 
-	createdUser, err := s.userRepo.Create(ctx, user)
+	payload, err := json.Marshal(UserRegisteredEvent{
+		Email:    user.Email,
+		UserName: user.Username,
+	})
+	if err != nil {
+		return nil, errors.NewInternalError(err)
+	}
+
+	createdUser, err := s.userRepo.CreateWithOutbox(ctx, user, &repository.OutboxEvent{
+		EventType: "user.registered",
+		Payload:   payload,
+	})
 	if err != nil {
 		s.logger.Error("Failed to create user", zap.Error(err))
 		return nil, errors.NewDatabaseError(err)
 	}
 
-	s.logger.Info("User registered successfuly", zap.Int64("user_id", createdUser.ID), zap.String("email", createdUser.Email))
+	s.logger.Info("User registered successfuly", zap.String("user_id", createdUser.ID.String()), zap.String("email", createdUser.Email))
 
 	return createdUser, nil
 }
@@ -87,7 +106,7 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*AuthRespon
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
 	if err != nil {
-		s.logger.Warn("Login failed: invalid password", zap.Int64("user_id", user.ID))
+		s.logger.Warn("Login failed: invalid password", zap.String("user_id", user.ID.String()))
 		return nil, errors.NewInvalidCredentialsError("Invalied email or password")
 	}
 
@@ -102,7 +121,7 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*AuthRespon
 	}
 
 	session := &models.Session{
-		ID:           uuid.New().String(),
+		ID:           uuid.New(),
 		UserID:       user.ID,
 		RefreshToken: refreshToken,
 		ExpiresAt:    expiresAt,
@@ -116,7 +135,7 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*AuthRespon
 		return nil, errors.NewDatabaseError(err)
 	}
 
-	s.logger.Info("User logged in successfully", zap.Int64("user_id", user.ID), zap.String("email", user.Email))
+	s.logger.Info("User logged in successfully", zap.String("user_id", user.ID.String()), zap.String("email", user.Email))
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
@@ -140,7 +159,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		s.logger.Warn("Refresh token expired", zap.Int64("user_id", session.UserID))
+		s.logger.Warn("Refresh token expired", zap.String("user_id", session.UserID.String()))
 		return nil, errors.NewUnauthorizedError("Refresh token expired")
 	}
 
@@ -154,7 +173,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (*A
 		return nil, errors.NewInternalError(err)
 	}
 
-	s.logger.Info("Token refreshed", zap.Int64("user_id", user.ID))
+	s.logger.Info("Token refreshed", zap.String("user_id", user.ID.String()))
 
 	return &AuthResponse{
 		AccessToken:  newAccessToken,
@@ -178,7 +197,7 @@ func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 	expiresAt := now.Add(s.jwtConfig.AccessTokenTTL)
 
 	claims := jwt.MapClaims{
-		"sub":      user.ID,
+		"sub":      user.ID.String(),
 		"email":    user.Email,
 		"username": user.Username,
 		"iat":      now.Unix(),
@@ -196,7 +215,6 @@ func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 }
 
 func (s *AuthService) generateRefreshToken() (string, time.Time, error) {
-
 	tokenBytes := make([]byte, 32)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {

@@ -25,8 +25,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int64
+            type: string
+            format: uuid
         - name: currency
           in: query
           required: false
@@ -132,8 +132,8 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int64
+            type: string
+            format: uuid
         - name: limit
           in: query
           schema:
@@ -162,7 +162,7 @@ paths:
   /wallet/transfer:
     post:
       tags: [transactions]
-      summary: Internal transfer between accounts (e.g. bet placement, payout)
+      summary: Internal transfer between accounts (e.g. fee settlement, reward credit)
       operationId: transfer
       parameters:
         - name: Idempotency-Key
@@ -196,8 +196,8 @@ components:
       type: object
       properties:
         userId:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         currency:
           type: string
         balance:
@@ -213,8 +213,8 @@ components:
       required: [userId, amount, currency]
       properties:
         userId:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         amount:
           type: string
           format: decimal
@@ -232,8 +232,8 @@ components:
       required: [userId, amount, currency]
       properties:
         userId:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         amount:
           type: string
           format: decimal
@@ -248,11 +248,11 @@ components:
       required: [fromUserId, toAccountType, amount, currency, reason]
       properties:
         fromUserId:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         toAccountType:
           type: string
-          description: e.g. 'system_house' for bet placement
+          description: Destination ledger account type, e.g. 'system_fees' or 'system_rewards'
         amount:
           type: string
           format: decimal
@@ -263,7 +263,7 @@ components:
           default: USD
         reason:
           type: string
-          description: e.g. 'bet_placed', 'bet_payout'
+          description: e.g. 'fee_settlement', 'reward_credit'
 
     TransactionResponse:
       type: object
@@ -273,7 +273,7 @@ components:
           format: uuid
         type:
           type: string
-          enum: [deposit, withdrawal, transfer, bet, payout]
+          enum: [deposit, withdrawal, transfer]
         status:
           type: string
           enum: [pending, completed, failed]

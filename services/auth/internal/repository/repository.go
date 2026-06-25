@@ -3,16 +3,22 @@ package repository
 import (
 	"context"
 	"errors"
-	"fairroll/pkg/logger"
-	"fairroll/pkg/models"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	"fairroll/pkg/logger"
+	"fairroll/pkg/models"
 )
 
 var ErrNotFound = errors.New("not found")
+
+type OutboxEvent struct {
+	EventType string
+	Payload   []byte
+}
 
 type UserRepository struct {
 	db     *pgx.Conn
@@ -53,9 +59,45 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) (*models
 		user.CreatedAt,
 		user.UpdatedAt,
 	).Scan(&user.ID)
-
 	if err != nil {
 		r.logger.Error("Failed to create user", zap.Error(err), zap.String("email", user.Email))
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) CreateWithOutbox(ctx context.Context, user *models.User, event *OutboxEvent) (*models.User, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback(ctx)
+
+	query := `INSERT INTO users (email, username, password_hash, kyc_status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+
+	err = tx.QueryRow(ctx, query,
+		user.Email,
+		user.Username,
+		user.PasswordHash,
+		user.KYCStatus,
+		user.CreatedAt,
+		user.UpdatedAt,
+	).Scan(&user.ID)
+	if err != nil {
+		r.logger.Error("Failed to create user", zap.Error(err), zap.String("email", user.Email))
+		return nil, err
+	}
+
+	outboxQuery := `INSERT INTO outbox_events (aggregate_id, event_type, payload) VALUES ($1, $2, $3)`
+	if _, err = tx.Exec(ctx, outboxQuery, user.ID, event.EventType, event.Payload); err != nil {
+		r.logger.Error("Failed to write outbox event", zap.Error(err), zap.String("user_id", user.ID.String()))
+		return nil, err
+	}
+
+	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -77,7 +119,6 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -102,7 +143,6 @@ func (r *UserRepository) GetByUsername(ctx context.Context, userName string) (*m
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -113,8 +153,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, userName string) (*m
 	return &user, nil
 }
 
-func (r *UserRepository) GetByID(ctx context.Context, userID int64) (*models.User, error) {
-
+func (r *UserRepository) GetByID(ctx context.Context, userID uuid.UUID) (*models.User, error) {
 	query := `SELECT id, email, username, password_hash, kyc_status, created_at, updated_at
 		FROM users WHERE id = $1`
 
@@ -129,7 +168,10 @@ func (r *UserRepository) GetByID(ctx context.Context, userID int64) (*models.Use
 		&user.UpdatedAt,
 	)
 	if err != nil {
-		r.logger.Error("Failed to get user by user id", zap.Error(err), zap.Int64("user_id", userID))
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		r.logger.Error("Failed to get user by user id", zap.Error(err), zap.String("user_id", userID.String()))
 		return nil, err
 	}
 	return &user, nil
@@ -148,9 +190,8 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 		time.Now(),
 		user.ID,
 	)
-
 	if err != nil {
-		r.logger.Error("Failed to update user", zap.Error(err), zap.Int64("user_id", user.ID))
+		r.logger.Error("Failed to update user", zap.Error(err), zap.String("user_id", user.ID.String()))
 		return err
 	}
 
@@ -158,8 +199,8 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 }
 
 func (r *SessionRepository) Create(ctx context.Context, session *models.Session) error {
-	if session.ID == "" {
-		session.ID = uuid.New().String()
+	if session.ID == uuid.Nil {
+		session.ID = uuid.New()
 	}
 
 	query := `INSERT INTO sessions (id, user_id, refresh_token, expires_at, created_at, updated_at)
@@ -173,9 +214,8 @@ func (r *SessionRepository) Create(ctx context.Context, session *models.Session)
 		session.CreatedAt,
 		session.UpdatedAt,
 	)
-
 	if err != nil {
-		r.logger.Error("Failed to create session", zap.Error(err), zap.Int64("user_id", session.UserID))
+		r.logger.Error("Failed to create session", zap.Error(err), zap.String("user_id", session.UserID.String()))
 		return err
 
 	}
@@ -197,7 +237,6 @@ func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken 
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)
-
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrNotFound
@@ -213,13 +252,12 @@ func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken 
 }
 
 // Delete session
-func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error {
+func (r *SessionRepository) Delete(ctx context.Context, sessionID uuid.UUID) error {
 	query := `DELETE FROM sessions WHERE id = $1`
 
 	_, err := r.db.Exec(ctx, query, sessionID)
-
 	if err != nil {
-		r.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID))
+		r.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
 		return err
 	}
 
@@ -227,15 +265,15 @@ func (r *SessionRepository) Delete(ctx context.Context, sessionID string) error 
 }
 
 // Delete session by  user ID
-func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID int64) error {
+func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
 	query := `DELETE  FROM sessions WHERE user_id = $1`
 
 	_, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
-		r.logger.Error("Failed to delete all sessions", zap.Error(err), zap.Int64("user_id", userID))
+		r.logger.Error("Failed to delete all sessions", zap.Error(err), zap.String("user_id", userID.String()))
 		return err
 	}
 
-	r.logger.Info("all sessions  deleted", zap.Int64("user_id", userID))
+	r.logger.Info("all sessions  deleted", zap.String("user_id", userID.String()))
 	return nil
 }
