@@ -1,4 +1,5 @@
-// WALLET SERVICE
+// NOTIFICATION SERVICE
+// Listens to events and sends notifications (emails, pushes, etc) like mock for now brudda
 
 package main
 
@@ -19,11 +20,7 @@ import (
 
 	"fairroll/pkg/config"
 	"fairroll/pkg/logger"
-	"fairroll/services/wallet/internal/consumer"
-	"fairroll/services/wallet/internal/handler"
-	"fairroll/services/wallet/internal/model"
-	"fairroll/services/wallet/internal/repository"
-	"fairroll/services/wallet/internal/service"
+	"fairroll/services/notification/internal/consumer"
 )
 
 func main() {
@@ -51,7 +48,7 @@ func main() {
 
 	defer logger.Sync()
 
-	logger.Info(ctx, "Starting Wallet Service",
+	logger.Info(ctx, "Starting Notification Service",
 		"name", cfg.Service.Name,
 		"version", cfg.Service.Version,
 		"port", cfg.Service.Port,
@@ -61,46 +58,46 @@ func main() {
 	connStr := cfg.Database.DSN
 	conn, err := pgx.Connect(context.Background(), connStr)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Printf("Note: Could not connect to database, notifications will be logged only: %v", err)
+	} else {
+		defer conn.Close(context.Background())
+		if err = conn.Ping(context.Background()); err != nil {
+			log.Printf("Note: Database ping failed, notifications will be logged only: %v", err)
+		}
 	}
 
-	defer conn.Close(context.Background())
-
-	if err = conn.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping wallet database")
-	}
-
-	walletRepo := repository.NewWalletRepository(conn)
-	walletService := service.NewWalletService(walletRepo)
-	walletHandler := handler.NewWalletHandler(walletService)
-
-	kafkaClient, err := kgo.NewClient(kgo.SeedBrokers(cfg.Kafka.Brokers...),
-		kgo.ConsumeTopics("user.events"),
-		kgo.ConsumerGroup("wallet-service"),
+	kafkaClient, err := kgo.NewClient(
+		kgo.SeedBrokers(cfg.Kafka.Brokers...),
+		kgo.ConsumeTopics(
+			"user.events",
+			"wallet.events",
+			"transfer.events",
+			"deposit.completed",
+			"withdrawal.completed",
+		),
+		kgo.ConsumerGroup("notification-service"),
 	)
 	if err != nil {
 		log.Fatalf("Failed to create kafka client: %v", err)
 	}
 	defer kafkaClient.Close()
 
-	userEventsConsumer := consumer.NewUserEventsConsumer(kafkaClient, walletService)
+	eventConsumer := consumer.NewEventConsumer(kafkaClient)
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	defer consumerCancel()
 
-	go userEventsConsumer.Run(consumerCtx)
-
-	logger.Info(ctx, "User events consumer started", "topic", "user.events")
+	go eventConsumer.Run(consumerCtx)
+	logger.Info(ctx, "Event consumer started", "topics", "user.events, transfer.events, etc")
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		fmt.Fprintf(w, `{"status": "ok", "service": "wallet", "timestamp": "%s"}`, time.Now().Format(time.RFC3339))
+		fmt.Fprintf(w, `{"status": "ok", "service": "notification", "timestamp": "%s"}`, time.Now().Format(time.RFC3339))
 	})
 
-	model.HandlerFromMux(walletHandler, mux)
 	addr := fmt.Sprintf(":%d", cfg.Service.Port)
 	server := &http.Server{
 		Addr:         addr,
@@ -111,7 +108,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info(ctx, "HTTP server started", "adress", addr)
+		logger.Info(ctx, "HTTP server started", "address", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error(ctx, "HTTP Server error", err, "address", addr)
 		}
@@ -120,7 +117,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigChan
-	logger.Info(ctx, "Shutdown signal recieved", "signal", sig.String())
+	logger.Info(ctx, "Shutdown signal received", "signal", sig.String())
 
 	consumerCancel()
 
@@ -131,5 +128,5 @@ func main() {
 		logger.Error(shutdownCtx, "Failed to shutdown server gracefully", err)
 	}
 
-	logger.Info(ctx, "Wallet Service shutdown complete")
+	logger.Info(shutdownCtx, "Notification Service shutdown complete")
 }

@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+option go_package = "fairroll/services/transfer/api";
+
+
+
+service TransferService {
+  rpc  SendTransfer(SendTransferRequest) returns (SendTransferResponse);
+
+  rpc GetTransfer(GetTransferRequest) returns (Transfer);
+
+  rpc ListTransfers(ListTransfersRequest) returns (ListTransfersResponse);
+
+  rpc InitiateDeposit(DepositRequest) returns (ListTransfersResponse);
+
+  rpc InitiateWithdrawal(WithdrawalRequest) returns (PaymentResponse);
+
+  rpc ConvertCurrency(ConvertRequest) returns (ConvertResponse);
+
+  rpc GetCurrencies(Empty) returns (CurrenciesResponse);
+}
+
+message SendTransferRequest {
+  string to_user_id = 1;
+  string amount = 2;
+  string currency = 3;
+  string idempotency_key = 4;
+}
+
+message SendTransferResponse {
+  string transfer_id = 1;
+  string status = 2;
+}
+
+message GetTransferRequest {
+  string transfer_id = 1;
+}
+
+message Transfer {
+  string id = 1;
+  string from_user_id = 2;
+  string to_user_id = 3;
+  string amount = 4;
+  string currency = 5;
+  string status = 6;
+  string created_at = 7;
+}
+
+message ListTransfersRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListTransfersResponse {
+  repeated Transfer transfers = 1;
+  int32 total = 2;
+}
+
+message DepositRequest {
+  string amount = 1;
+  string currency = 2;
+  string source = 3;
+  string idempotency_key = 4;
+}
+
+message WithdrawalRequest {
+  string amount = 1;
+  string currency = 2;
+  string destination = 3;
+  string idempotency_key = 4;
+}
+
+message PaymentResponse {
+  string payment_id = 1;
+  string status = 2;
+}
+
+message ConvertRequest {
+  string amount = 1;
+  string from_currency = 2;
+  string to_currency = 3;
+}
+
+message ConvertResponse {
+  string original_amount = 1;
+  string converted_amount = 2;
+  string from_currency = 3;
+  string to_currency = 4;
+}
+
+message Empty {}
+
+message CurrenciesResponse {
+  repeated string currencies = 1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

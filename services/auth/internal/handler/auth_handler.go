@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"fairroll/pkg/errors"
 	"fairroll/pkg/middleware"
 	"fairroll/services/auth/internal/model"
 	"fairroll/services/auth/internal/service"
@@ -37,6 +38,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.authService.Register(r.Context(), &req)
 	if err != nil {
+		if appErr, ok := errors.AsAppError(err); ok {
+			middleware.RespondError(w, appErr.StatusCode, appErr.Message)
+			return
+		}
 		middleware.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

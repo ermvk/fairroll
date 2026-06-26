@@ -35,7 +35,7 @@ go.work.sum
 Thumbs.db
 
 # Env
-.env
+.env.example
 .env.*
 
 # Logs
@@ -44,3 +44,7 @@ Thumbs.db
 # Temp
 *.tmp
 *.swp
+
+
+# Docs local
+**/docs/
