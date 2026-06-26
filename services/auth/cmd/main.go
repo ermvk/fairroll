@@ -27,7 +27,7 @@ func main() {
 	defer cancel()
 
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env found")
+		log.Println("No .env.example found")
 	}
 
 	cfg, err := config.LoadConfig(ctx)
@@ -94,7 +94,7 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		fmt.Fprintf(w, `{ "status": "ok", "service": "auth", "timestamp":"%s"`, time.Now().Format(time.RFC3339))
+		fmt.Fprintf(w, `{ "status": "ok", "service": "auth", "timestamp":"%s"}`, time.Now().Format(time.RFC3339))
 	})
 
 	authHandler := handler.NewAuthHandler(authService)

@@ -1,5 +1,3 @@
-// WALLET SERVICE
-
 package main
 
 import (
@@ -19,11 +17,9 @@ import (
 
 	"fairroll/pkg/config"
 	"fairroll/pkg/logger"
-	"fairroll/services/wallet/internal/consumer"
-	"fairroll/services/wallet/internal/handler"
-	"fairroll/services/wallet/internal/model"
-	"fairroll/services/wallet/internal/repository"
-	"fairroll/services/wallet/internal/service"
+	"fairroll/pkg/outbox"
+	"fairroll/services/transfer/internal/repository"
+	"fairroll/services/transfer/internal/service"
 )
 
 func main() {
@@ -48,59 +44,56 @@ func main() {
 	if err := logger.Init(loggerCfg); err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
-
 	defer logger.Sync()
 
-	logger.Info(ctx, "Starting Wallet Service",
+	logger.Info(ctx,
+		"Starting Transfer Service",
 		"name", cfg.Service.Name,
 		"version", cfg.Service.Version,
 		"port", cfg.Service.Port,
-		"environment", cfg.Environment,
-	)
+		"environment", cfg.Environment)
 
 	connStr := cfg.Database.DSN
 	conn, err := pgx.Connect(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-
 	defer conn.Close(context.Background())
 
 	if err = conn.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping wallet database")
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 
-	walletRepo := repository.NewWalletRepository(conn)
-	walletService := service.NewWalletService(walletRepo)
-	walletHandler := handler.NewWalletHandler(walletService)
-
-	kafkaClient, err := kgo.NewClient(kgo.SeedBrokers(cfg.Kafka.Brokers...),
-		kgo.ConsumeTopics("user.events"),
-		kgo.ConsumerGroup("wallet-service"),
-	)
+	kafkaClient, err := kgo.NewClient(kgo.SeedBrokers(cfg.Kafka.Brokers...))
 	if err != nil {
 		log.Fatalf("Failed to create kafka client: %v", err)
 	}
 	defer kafkaClient.Close()
 
-	userEventsConsumer := consumer.NewUserEventsConsumer(kafkaClient, walletService)
+	relay := outbox.NewRelay(conn, kafkaClient, "transfer.events")
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	defer relayCancel()
+	go relay.Run(relayCtx)
+	logger.Info(ctx, "Transfer outbox relay started")
 
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	defer consumerCancel()
+	transferRepo := repository.NewTransferRepository(conn)
+	eventPublisher := service.NewEventPublisher(conn)
+	currencyServiceAddr := cfg.Services.Currency.Addr
 
-	go userEventsConsumer.Run(consumerCtx)
-
-	logger.Info(ctx, "User events consumer started", "topic", "user.events")
+	transferService, err := service.NewTransferService(transferRepo, eventPublisher, currencyServiceAddr)
+	if err != nil {
+		log.Fatalf("Failed to create transfer service: %v", err)
+	}
+	defer transferService.Close()
 
 	mux := http.NewServeMux()
-
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		fmt.Fprintf(w, `{"status": "ok", "service": "wallet", "timestamp": "%s"}`, time.Now().Format(time.RFC3339))
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ok","service":"transfer","timestamp":"%s"}`,
+			time.Now().Format(time.RFC3339))
 	})
 
-	model.HandlerFromMux(walletHandler, mux)
 	addr := fmt.Sprintf(":%d", cfg.Service.Port)
 	server := &http.Server{
 		Addr:         addr,
@@ -111,25 +104,22 @@ func main() {
 	}
 
 	go func() {
-		logger.Info(ctx, "HTTP server started", "adress", addr)
+		logger.Info(ctx, "HTTP server started", "address", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error(ctx, "HTTP Server error", err, "address", addr)
+			logger.Error(ctx, "HTTP server error", err, "address", addr)
 		}
 	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigChan
-	logger.Info(ctx, "Shutdown signal recieved", "signal", sig.String())
+	logger.Info(ctx, "Shutdown signal received", "signal", sig.String())
 
-	consumerCancel()
+	relayCancel()
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
-
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error(shutdownCtx, "Failed to shutdown server gracefully", err)
 	}
-
-	logger.Info(ctx, "Wallet Service shutdown complete")
 }

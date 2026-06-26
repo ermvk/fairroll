@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - fairroll
 
   postgres-wallet:
     image: postgres:16-alpine
@@ -30,6 +32,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - fairroll
 
   kafka:
     image: apache/kafka:3.8.0
@@ -52,6 +56,8 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+    networks:
+      - fairroll
 
   kafka-init:
     image: apache/kafka:3.8.0
@@ -61,7 +67,60 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user.events --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user.events --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic wallet.events --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic transfer.events --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic transfer.completed --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic deposit.completed --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic withdrawal.completed --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic conversion.requested --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic conversion.completed --partitions 1 --replication-factor 1
+    networks:
+      - fairroll
+
+  migrate-auth:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    volumes:
+      - ./services/auth/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://fairroll:fairroll@postgres-auth:5432/fairroll_auth?sslmode=disable"
+      - "up"
+    networks:
+      - fairroll
+
+  migrate-wallet:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres-wallet:
+        condition: service_healthy
+    volumes:
+      - ./services/wallet/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://fairroll:fairroll@postgres-wallet:5432/fairroll_wallet?sslmode=disable"
+      - "up"
+    networks:
+      - fairroll
+
+  migrate-transfer:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres-wallet:
+        condition: service_healthy
+      migrate-wallet:
+        condition: service_completed_successfully
+    volumes:
+      - ./services/transfer/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://fairroll:fairroll@postgres-wallet:5432/fairroll_wallet?sslmode=disable"
+      - "up"
+    networks:
+      - fairroll
 
   auth:
     build:
@@ -77,8 +136,14 @@ services:
     depends_on:
       postgres-auth:
         condition: service_healthy
+      migrate-auth:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - fairroll
 
   wallet:
     build:
@@ -94,10 +159,85 @@ services:
     depends_on:
       postgres-wallet:
         condition: service_healthy
+      migrate-wallet:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - fairroll
+
+  transfer:
+    build:
+      context: .
+      dockerfile: services/transfer/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      SERVICE_NAME: transfer-service
+      SERVICE_PORT: "8082"
+      DATABASE_DSN: postgres://fairroll:fairroll@postgres-wallet:5432/fairroll_wallet?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      CURRENCY_SERVICE_ADDR: currency:50051
+    depends_on:
+      postgres-wallet:
+        condition: service_healthy
+      migrate-transfer:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      currency:
+        condition: service_started
+    networks:
+      - fairroll
+
+  notification:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      SERVICE_NAME: notification-service
+      SERVICE_PORT: "8084"
+      DATABASE_DSN: postgres://fairroll:fairroll@postgres-auth:5432/fairroll_auth?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+      migrate-auth:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    networks:
+      - fairroll
+
+  currency:
+    build:
+      context: .
+      dockerfile: services/currency/Dockerfile
+    ports:
+      - "8085:8085"
+      - "50051:50051"
+    environment:
+      SERVICE_NAME: currency-service
+      SERVICE_PORT: "8085"
+      GRPC_PORT: "50051"
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - fairroll
 
 volumes:
   postgres_auth_data:
   postgres_wallet_data:
   kafka_data:
+
+networks:
+  fairroll:
+    driver: bridge

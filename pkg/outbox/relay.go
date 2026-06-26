@@ -19,19 +19,26 @@ type Event struct {
 }
 
 type Relay struct {
-	db       *pgx.Conn
-	producer *kgo.Client
-	topic    string
-	interval time.Duration
-	batch    int
-	logger   *zap.Logger
+	db           *pgx.Conn
+	producer     *kgo.Client
+	defaultTopic string
+	topicMap     map[string]string // event_type -> topic
+	interval     time.Duration
+	batch        int
+	logger       *zap.Logger
 }
 
-func NewRelay(db *pgx.Conn, producer *kgo.Client, topic string) *Relay {
+func NewRelay(db *pgx.Conn, producer *kgo.Client, defaultTopic string) *Relay {
 	return &Relay{
-		db:       db,
-		producer: producer,
-		topic:    topic,
+		db:           db,
+		producer:     producer,
+		defaultTopic: defaultTopic,
+		topicMap: map[string]string{
+			"transfer.completed":   "transfer.completed",
+			"deposit.completed":    "deposit.completed",
+			"withdrawal.completed": "withdrawal.completed",
+			"conversion.completed": "conversion.completed",
+		},
 		interval: time.Second,
 		batch:    50,
 		logger:   logger.GetZap(),
@@ -102,8 +109,14 @@ func (r *Relay) fetchPending(ctx context.Context) ([]Event, error) {
 }
 
 func (r *Relay) publish(ctx context.Context, e Event) error {
+	// Определяем топик по event_type или используем default
+	topic := r.topicMap[e.EventType]
+	if topic == "" {
+		topic = r.defaultTopic
+	}
+
 	record := &kgo.Record{
-		Topic: r.topic,
+		Topic: topic,
 		Key:   []byte(e.AggregateID),
 		Value: e.Payload,
 		Headers: []kgo.RecordHeader{

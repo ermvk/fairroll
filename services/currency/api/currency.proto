@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package currency;
+
+option go_package = "fairroll/services/currency/internal/pb";
+
+service CurrencyService {
+  // Convert конвертирует сумму из одной валюты в другую
+  rpc Convert(ConvertRequest) returns (ConvertResponse);
+
+  // GetRate получает курс обмена между двумя валютами
+  rpc GetRate(GetRateRequest) returns (GetRateResponse);
+
+  // GetRates получает все курсы для базовой валюты
+  rpc GetRates(GetRatesRequest) returns (GetRatesResponse);
+
+  // GetSupportedCurrencies возвращает список поддерживаемых валют
+  rpc GetSupportedCurrencies(Empty) returns (SupportedCurrenciesResponse);
+}
+
+message ConvertRequest {
+  string amount = 1;
+  string from_currency = 2;
+  string to_currency = 3;
+}
+
+message ConvertResponse {
+  string original_amount = 1;
+  string converted_amount = 2;
+  string rate = 3;
+  string error = 4;
+}
+
+message GetRateRequest {
+  string from_currency = 1;
+  string to_currency = 2;
+}
+
+message GetRateResponse {
+  string rate = 1;
+  string error = 2;
+}
+
+message GetRatesRequest {
+  string base_currency = 1;
+}
+
+message GetRatesResponse {
+  map<string, string> rates = 1;
+  string error = 2;
+}
+
+message Empty {}
+
+message SupportedCurrenciesResponse {
+  repeated string currencies = 1;
+}

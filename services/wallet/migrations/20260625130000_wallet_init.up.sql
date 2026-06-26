@@ -20,6 +20,6 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
     transaction_id UUID NOT NULL REFERENCES transactions(id),
     account_id BIGINT NOT NULL REFERENCES accounts(id),
     direction VARCHAR(10) NOT NULL,
-    amount NUMERIC(78,0) NOT NULL,
+    amount NUMERIC(20, 4) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -2,21 +2,29 @@ package config
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"time"
 )
 
 type Config struct {
-	Service         ServiceConfig
-	Logger          LoggerConfig
-	Environment     string
-	Database        DatabaseConfig
-	JWT             JWTConfig
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
-	Kafka           KafkaConfig
-	Redis           RedisConfig
+	Service     ServiceConfig
+	Logger      LoggerConfig
+	Environment string
+	Database    DatabaseConfig
+	JWT         JWTConfig
+	Kafka       KafkaConfig
+	Redis       RedisConfig
+	Services    ServicesConfig
+}
+
+type ServicesConfig struct {
+	Currency CurrencyConfig
+}
+
+type CurrencyConfig struct {
+	Addr string
 }
 
 type ServiceConfig struct {
@@ -24,6 +32,7 @@ type ServiceConfig struct {
 	Version string
 	Port    int
 }
+
 type LoggerConfig struct {
 	Level  string
 	Format string
@@ -51,7 +60,6 @@ type RedisConfig struct {
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {
-
 	cfg := &Config{
 		Service: ServiceConfig{
 			Name:    getEnv("SERVICE_NAME", "fairrol-service"),
@@ -68,11 +76,9 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 		},
 		JWT: JWTConfig{
 			SecretKey:       getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
-			AccessTokenTTL:  time.Duration(getEnvInt64("JWT_ACCESS_TTL", 900)) * time.Second,     // 15 min
-			RefreshTokenTTL: time.Duration(getEnvInt64("JWT_REFRESH_TTL", 604800)) * time.Second, // 7 days
+			AccessTokenTTL:  time.Duration(getEnvInt64("JWT_ACCESS_TTL", 900)) * time.Second,
+			RefreshTokenTTL: time.Duration(getEnvInt64("JWT_REFRESH_TTL", 604800)) * time.Second,
 		},
-		AccessTokenTTL:  time.Duration(getEnvInt64("JWT_ACCESS_TTL", 900)) * time.Second,
-		RefreshTokenTTL: time.Duration(getEnvInt64("JWT_REFRESH_TTL", 604800)) * time.Second,
 		Kafka: KafkaConfig{
 			Brokers: []string{getEnv("KAFKA_BROKERS", "localhost:9092")},
 			Topic:   getEnv("KAFKA_TOPIC", "fairrol-events"),
@@ -82,6 +88,15 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 			Port: getEnvInt("REDIS_PORT", 6379),
 			DB:   getEnvInt("REDIS_DB", 0),
 		},
+		Services: ServicesConfig{
+			Currency: CurrencyConfig{
+				Addr: getEnv("CURRENCY_SERVICE_ADDR", "localhost:8085"),
+			},
+		},
+	}
+
+	if cfg.Environment == "production" && cfg.JWT.SecretKey == "your-secret-key-change-in-production" {
+		return nil, errors.New("JWT_SECRET must be set in production")
 	}
 
 	return cfg, nil
