@@ -25,20 +25,8 @@ type UserRepository struct {
 	logger *zap.Logger
 }
 
-type SessionRepository struct {
-	db     *pgx.Conn
-	logger *zap.Logger
-}
-
 func NewUserRepository(db *pgx.Conn) *UserRepository {
 	return &UserRepository{
-		db:     db,
-		logger: logger.GetZap(),
-	}
-}
-
-func NewSessionRepository(db *pgx.Conn) *SessionRepository {
-	return &SessionRepository{
 		db:     db,
 		logger: logger.GetZap(),
 	}
@@ -195,85 +183,5 @@ func (r *UserRepository) Update(ctx context.Context, user *models.User) error {
 		return err
 	}
 
-	return nil
-}
-
-func (r *SessionRepository) Create(ctx context.Context, session *models.Session) error {
-	if session.ID == uuid.Nil {
-		session.ID = uuid.New()
-	}
-
-	query := `INSERT INTO sessions (id, user_id, refresh_token, expires_at, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6)`
-
-	_, err := r.db.Exec(ctx, query,
-		session.ID,
-		session.UserID,
-		session.RefreshToken,
-		session.ExpiresAt,
-		session.CreatedAt,
-		session.UpdatedAt,
-	)
-	if err != nil {
-		r.logger.Error("Failed to create session", zap.Error(err), zap.String("user_id", session.UserID.String()))
-		return err
-
-	}
-
-	return nil
-}
-
-// Get session by refresh token
-func (r *SessionRepository) GetByRefreshToken(ctx context.Context, refreshToken string) (*models.Session, error) {
-	query := `SELECT id, user_id, refresh_token, expires_at, created_at, updated_at
-		FROM sessions WHERE refresh_token = $1`
-
-	var session models.Session
-	err := r.db.QueryRow(ctx, query, refreshToken).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.RefreshToken,
-		&session.ExpiresAt,
-		&session.CreatedAt,
-		&session.UpdatedAt,
-	)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrNotFound
-		}
-		r.logger.Error("Failed to get session by refresh token", zap.Error(err))
-		return nil, err
-	}
-
-	if session.ExpiresAt.Before(time.Now()) {
-		return nil, ErrNotFound
-	}
-	return &session, nil
-}
-
-// Delete session
-func (r *SessionRepository) Delete(ctx context.Context, sessionID uuid.UUID) error {
-	query := `DELETE FROM sessions WHERE id = $1`
-
-	_, err := r.db.Exec(ctx, query, sessionID)
-	if err != nil {
-		r.logger.Error("Failed to delete session", zap.Error(err), zap.String("session_id", sessionID.String()))
-		return err
-	}
-
-	return nil
-}
-
-// Delete session by  user ID
-func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
-	query := `DELETE  FROM sessions WHERE user_id = $1`
-
-	_, err := r.db.Exec(ctx, query, userID)
-	if err != nil {
-		r.logger.Error("Failed to delete all sessions", zap.Error(err), zap.String("user_id", userID.String()))
-		return err
-	}
-
-	r.logger.Info("all sessions  deleted", zap.String("user_id", userID.String()))
 	return nil
 }

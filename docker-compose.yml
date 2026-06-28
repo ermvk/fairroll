@@ -35,6 +35,20 @@ services:
     networks:
       - fairroll
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - fairroll
+
   kafka:
     image: apache/kafka:3.8.0
     ports:
@@ -132,6 +146,8 @@ services:
       SERVICE_NAME: auth-service
       SERVICE_PORT: "8080"
       DATABASE_DSN: postgres://fairroll:fairroll@postgres-auth:5432/fairroll_auth?sslmode=disable
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       KAFKA_BROKERS: kafka:9092
     depends_on:
       postgres-auth:
@@ -236,6 +252,7 @@ services:
 volumes:
   postgres_auth_data:
   postgres_wallet_data:
+  redis_data:
   kafka_data:
 
 networks:
