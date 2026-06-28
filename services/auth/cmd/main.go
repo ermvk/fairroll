@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"fairroll/pkg/config"
@@ -63,10 +65,23 @@ func main() {
 	defer conn.Close(context.Background())
 
 	if err = conn.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping database %v", err)
+		log.Fatalf("Failed to ping postgres db %v", err)
 	}
 
-	logger.Info(ctx, "Successfully connected to database")
+	logger.Info(ctx, "Successfully connected to postgres db")
+
+	redisAddr := fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port)
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+		DB:   cfg.Redis.DB,
+	})
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+
+	logger.Info(ctx, "Successfully connected to Redis", "addr", redisAddr)
 
 	kafkaClient, err := kgo.NewClient(
 		kgo.SeedBrokers(cfg.Kafka.Brokers...))
@@ -85,7 +100,7 @@ func main() {
 	logger.Info(ctx, "Outbox relay started", "topic", "user.events")
 
 	userRepo := repository.NewUserRepository(conn)
-	sessionRepo := repository.NewSessionRepository(conn)
+	sessionRepo := repository.NewSessionRedisRepository(redisClient)
 
 	authService := service.NewAuthService(userRepo, sessionRepo, cfg)
 
@@ -114,7 +129,7 @@ func main() {
 		logger.Info(ctx, "HTTP server started",
 			"address", addr)
 
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error(ctx, "HTTP Server error", err, "addr", addr)
 		}
 	}()

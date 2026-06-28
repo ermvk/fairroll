@@ -12,26 +12,6 @@ No premature optimization. Every improvement must be justified by data.
 - Measure second
 - Optimize third
 
-## Initial Constraints
-
-### PostgreSQL
-
-- No secondary indexes
-- No partitioning
-- No read replicas
-
-### Kafka
-
-- Single broker
-- Single partition topics
-- Replication factor = 1
-
-### Application
-
-- No Redis
-- No caching
-- No CQRS
-- No horizontal scaling
 
 ## Architecture
 
@@ -51,6 +31,7 @@ graph TD
 ## Stack
 
 - Go
+- Redis
 - PostgreSQL
 - Kafka
 - Franz-go

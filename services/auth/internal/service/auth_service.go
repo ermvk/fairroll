@@ -21,7 +21,7 @@ import (
 
 type AuthService struct {
 	userRepo    *repository.UserRepository
-	sessionRepo *repository.SessionRepository
+	sessionRepo *repository.SessionRedisRepository
 	jwtConfig   *config.JWTConfig
 	logger      *zap.Logger
 }
@@ -51,7 +51,7 @@ type AuthResponse struct {
 	User         *models.User
 }
 
-func NewAuthService(userRepo *repository.UserRepository, sessionRepo *repository.SessionRepository, cfg *config.Config) *AuthService {
+func NewAuthService(userRepo *repository.UserRepository, sessionRepo *repository.SessionRedisRepository, cfg *config.Config) *AuthService {
 	return &AuthService{
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
