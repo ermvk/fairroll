@@ -98,8 +98,7 @@ func main() {
 	})
 
 	authHandler := handler.NewAuthHandler(authService)
-	authHandler.RegisterRouters(mux)
-	// TODO: Connection to DB
+	authHandler.RegisterRouters(mux, cfg.JWT.SecretKey)
 
 	addr := fmt.Sprintf(":%d", cfg.Service.Port)
 

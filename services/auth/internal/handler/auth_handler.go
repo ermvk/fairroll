@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"fairroll/pkg/errors"
 	"fairroll/pkg/middleware"
 	"fairroll/services/auth/internal/model"
+	"fairroll/services/auth/internal/repository"
 	"fairroll/services/auth/internal/service"
 )
 
@@ -20,11 +23,11 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 	}
 }
 
-func (h *AuthHandler) RegisterRouters(mux *http.ServeMux) {
+func (h *AuthHandler) RegisterRouters(mux *http.ServeMux, secretKey string) {
 	mux.HandleFunc("POST /auth/register", h.Register)
 	mux.HandleFunc("POST /auth/login", h.Login)
 	mux.HandleFunc("POST /auth/refresh", h.Refresh)
-	mux.HandleFunc("GET /auth/me", h.Me)
+	mux.Handle("GET /auth/me", middleware.AuthMiddleware(secretKey)(http.HandlerFunc(h.Me)))
 }
 
 // Register habdler for registration of new user
@@ -92,7 +95,30 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		middleware.RespondError(w, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	user, err := h.authService.GetUserByID(r.Context(), userID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			middleware.RespondError(w, http.StatusNotFound, "User not found")
+			return
+		}
+
+		middleware.RespondError(w, http.StatusInternalServerError, "Failed to get user")
+		return
+	}
+
 	middleware.RespondSuccess(w, http.StatusOK, map[string]interface{}{
-		"message": "handler ME still not implemented",
+		"user": &model.UserResponse{
+			Id:        &user.ID,
+			Email:     &user.Email,
+			UserName:  &user.Username,
+			KycStatus: &user.KYCStatus,
+			CreatedAt: &user.CreatedAt,
+		},
 	})
 }
