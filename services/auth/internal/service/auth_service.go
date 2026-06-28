@@ -32,6 +32,25 @@ type UserRegisteredEvent struct {
 	UserName string `json:"user_name"`
 }
 
+type RegisterRequest struct {
+	Email    string
+	UserName string
+	Password string
+}
+
+type LoginRequest struct {
+	Email    string
+	Password string
+}
+
+type AuthResponse struct {
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	ExpiresIn    int64
+	User         *models.User
+}
+
 func NewAuthService(userRepo *repository.UserRepository, sessionRepo *repository.SessionRepository, cfg *config.Config) *AuthService {
 	return &AuthService{
 		userRepo:    userRepo,
@@ -228,21 +247,13 @@ func (s *AuthService) generateRefreshToken() (string, time.Time, error) {
 	return token, expiresAt, nil
 }
 
-type RegisterRequest struct {
-	Email    string
-	UserName string
-	Password string
-}
-
-type LoginRequest struct {
-	Email    string
-	Password string
-}
-
-type AuthResponse struct {
-	AccessToken  string
-	RefreshToken string
-	TokenType    string
-	ExpiresIn    int64
-	User         *models.User
+func (s *AuthService) GetUserByID(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return nil, errors.NewNotFoundError("User")
+		}
+		return nil, errors.NewDatabaseError(err)
+	}
+	return user, nil
 }
