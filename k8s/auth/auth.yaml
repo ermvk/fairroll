@@ -28,6 +28,10 @@ spec:
           env:
             - name: DATABASE_DSN
               value: "postgres://auth_user:auth_password@auth-db-service:5432/auth_db"
+            - name: REDIS_HOST
+              value: redis-service
+            - name: REDIS_PORT
+              value: "6379"
 
 ---
 apiVersion: v1
