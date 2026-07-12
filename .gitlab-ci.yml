@@ -1,0 +1,16 @@
+stages:
+  - build
+
+build-auth:
+  stage: build
+
+  tags:
+    - linux
+
+  script:
+    - go version
+    - go mod download
+    - go build -o auth ./services/auth/cmd
+
+  only:
+    - feature/auth-003-gitlab-ci

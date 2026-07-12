@@ -38,3 +38,7 @@ graph TD
 - Docker
 - Prometheus
 - Grafana
+
+### For more info get in docs folder from root
+
+`/docs`
