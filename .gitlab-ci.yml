@@ -1,0 +1,33 @@
+stages:
+  - build
+  - test
+  - deploy
+
+build-auth:
+  stage: build
+  tags:
+    - local-wsl
+  script:
+    - go build -o auth ./services/auth/cmd
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build -f services/auth/Dockerfile -t "$CI_REGISTRY_IMAGE/auth:latest" .
+    - docker push "$CI_REGISTRY_IMAGE/auth:latest"
+
+test-auth:
+  stage: test
+  tags:
+    - local-wsl
+  script:
+    - go test ./services/auth/...
+
+deploy-auth:
+  stage: deploy
+  tags:
+    - local-wsl
+  script:
+    - kubectl apply -f k8s/redis/redis.yaml
+    - kubectl apply -f k8s/auth/postgres.yaml
+    - sed -i "s|auth-image-placeholder:latest|$CI_REGISTRY_IMAGE/auth:latest|g" k8s/auth/auth.yaml
+    - kubectl apply -f k8s/auth/auth.yaml
+    - kubectl rollout restart deployment/auth
+    - kubectl rollout status deployment/auth

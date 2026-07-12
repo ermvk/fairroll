@@ -38,3 +38,12 @@ graph TD
 - Docker
 - Prometheus
 - Grafana
+- Kubernetes
+
+### Additional
+
+- k9s
+
+### For more info get in docs folder from root
+
+`/docs`
