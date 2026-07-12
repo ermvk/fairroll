@@ -3,33 +3,31 @@ kind: Deployment
 metadata:
   name: auth
   namespace: default
+
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: auth-app
+
   template:
     metadata:
       labels:
         app: auth-app
+
     spec:
       containers:
         - name: auth
           image: auth-image-placeholder:latest
           imagePullPolicy: Always
+
           ports:
             - containerPort: 8080
+
           env:
-            - name: DB_HOST
-              value: "auth-db-service"
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: "auth_user"
-            - name: DB_PASSWORD
-              value: "auth_password"
-            - name: DB_NAME
-              value: "auth_db"
+            - name: DATABASE_DSN
+              value: "postgres://auth_user:auth_password@auth-db-service:5432/auth_db"
 
 ---
 apiVersion: v1
@@ -37,9 +35,11 @@ kind: Service
 metadata:
   name: auth-service
   namespace: default
+
 spec:
   selector:
     app: auth-app
+
   ports:
     - protocol: TCP
       port: 8080
