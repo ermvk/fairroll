@@ -1,16 +1,39 @@
 stages:
+  - test
   - build
+  - deploy
+
+test-auth:
+  stage: test
+  tags:
+    - local-wsl
+  script:
+    - go test ./...
 
 build-auth:
   stage: build
-
   tags:
     - local-wsl
-
+  services:
+    - docker:dind
   script:
-    - go version
-    - go mod download
-    - go build -o auth ./services/auth/cmd
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker build -t $CI_REGISTRY_IMAGE:latest .
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - feature/auth-003-gitlab-ci
 
+deploy-auth:
+  stage: deploy
+  tags:
+    - local-wsl
+  script:
+    - kubectl apply -f k8s/auth/postgres.yaml
+
+    - sed -i "s|auth-image-placeholder:latest|$CI_REGISTRY_IMAGE:latest|g" k8s/auth/auth.yaml
+
+    - kubectl apply -f k8s/auth/auth.yaml
+
+    - kubectl rollout restart deployment/auth-deployment
   only:
     - feature/auth-003-gitlab-ci
