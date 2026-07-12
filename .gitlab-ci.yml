@@ -5,7 +5,7 @@ build-auth:
   stage: build
 
   tags:
-    - linux
+    - local-wsl
 
   script:
     - go version
