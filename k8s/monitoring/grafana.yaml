@@ -22,6 +22,10 @@ spec:
               value: admin
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: admin
+            - name: GF_SERVER_ROOT_URL
+              value: "http://api.fairroll.local/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
 
 ---
 apiVersion: v1
