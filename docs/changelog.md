@@ -31,3 +31,12 @@ Added - **auth**: Implemented Refresh Token storage in Redis with automatic TTL 
 ### Added
 
 - feature/auth-004-implemet-ingress-for-outer-requests
+- added access from other outer networks
+
+
+
+## - 2026-07-13
+
+### Added
+
+- feature/auth-005-add-migration-pipeline

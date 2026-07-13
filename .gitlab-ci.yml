@@ -28,6 +28,12 @@ deploy-auth:
     - kubectl apply -f k8s/fairroll-ingress.yaml
     - kubectl apply -f k8s/redis/redis.yaml
     - kubectl apply -f k8s/auth/postgres.yaml
+
+    - kubectl wait --for=condition=ready pod -l app=auth-db --timeout=60s
+
+    - kubectl delete configmap auth-migrations-sql --ignore-not-found=true
+    - kubectl create configmap auth-migrations-sql --from-file=services/auth/migrations/
+
     - sed -i "s|auth-image-placeholder:latest|$CI_REGISTRY_IMAGE/auth:latest|g" k8s/auth/auth.yaml
     - kubectl apply -f k8s/auth/auth.yaml
     - kubectl rollout restart deployment/auth

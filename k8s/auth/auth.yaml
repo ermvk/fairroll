@@ -3,28 +3,32 @@ kind: Deployment
 metadata:
   name: auth
   namespace: default
-
 spec:
   replicas: 1
-
   selector:
     matchLabels:
       app: auth-app
-
   template:
     metadata:
       labels:
         app: auth-app
-
     spec:
+      initContainers:
+        - name: run-migrations
+          image: migrate/migrate:v4.15.2
+          volumeMounts:
+            - name: migration-files
+              mountPath: /migrations
+          args:
+            - "-path=/migrations"
+            - "-database=postgres://auth_user:auth_password@auth-db-service:5432/auth_db?sslmode=disable"
+            - "up"
       containers:
         - name: auth
           image: auth-image-placeholder:latest
           imagePullPolicy: Always
-
           ports:
             - containerPort: 8080
-
           env:
             - name: DATABASE_DSN
               value: "postgres://auth_user:auth_password@auth-db-service:5432/auth_db"
@@ -32,18 +36,19 @@ spec:
               value: redis-service
             - name: REDIS_PORT
               value: "6379"
-
+      volumes:
+        - name: migration-files
+          configMap:
+            name: auth-migrations-sql
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: auth-service
   namespace: default
-
 spec:
   selector:
     app: auth-app
-
   ports:
     - protocol: TCP
       port: 8080
