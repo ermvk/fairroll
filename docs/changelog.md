@@ -34,9 +34,9 @@ Added - **auth**: Implemented Refresh Token storage in Redis with automatic TTL 
 - added access from other outer networks
 
 
-
 ## - 2026-07-13
 
 ### Added
 
 - feature/auth-005-add-migration-pipeline
+- add DB migration pipeline and fixed db flow with registration
