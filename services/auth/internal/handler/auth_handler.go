@@ -27,10 +27,16 @@ func (h *AuthHandler) RegisterRouters(mux *http.ServeMux, secretKey string) {
 	mux.HandleFunc("POST /auth/register", h.Register)
 	mux.HandleFunc("POST /auth/login", h.Login)
 	mux.HandleFunc("POST /auth/refresh", h.Refresh)
+	mux.HandleFunc("GET /auth/health", h.Health)
 	mux.Handle("GET /auth/me", middleware.AuthMiddleware(secretKey)(http.HandlerFunc(h.Me)))
 }
 
-// Register habdler for registration of new user
+// Health handler for health check
+func (h *AuthHandler) Health(w http.ResponseWriter, r *http.Request) {
+	middleware.RespondSuccess(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Register handler for registration of new user
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req service.RegisterRequest
 
