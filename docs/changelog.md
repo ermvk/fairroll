@@ -25,3 +25,9 @@ Added - **auth**: Implemented Refresh Token storage in Redis with automatic TTL 
 - added Kubernetes manifests (Deployment, Service) for auth-service, auth-db (Postgres) and redis
 - set up GitLab CI pipeline: build, test, deploy stages
 - deploy stage applies manifests to a k8s cluster for verification
+
+## - 2026-07-13
+
+### Added
+
+- feature/auth-004-implemet-ingress-for-outer-requests

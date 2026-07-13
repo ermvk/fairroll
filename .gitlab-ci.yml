@@ -25,6 +25,7 @@ deploy-auth:
   tags:
     - local-wsl
   script:
+    - kubectl apply -f k8s/fairroll-ingress.yaml
     - kubectl apply -f k8s/redis/redis.yaml
     - kubectl apply -f k8s/auth/postgres.yaml
     - sed -i "s|auth-image-placeholder:latest|$CI_REGISTRY_IMAGE/auth:latest|g" k8s/auth/auth.yaml
