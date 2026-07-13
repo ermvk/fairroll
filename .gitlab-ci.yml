@@ -38,3 +38,9 @@ deploy-auth:
     - kubectl apply -f k8s/auth/auth.yaml
     - kubectl rollout restart deployment/auth
     - kubectl rollout status deployment/auth
+    - kubectl apply -f k8s/monitoring/prometheus.yaml
+    - kubectl apply -f k8s/monitoring/grafana.yaml
+    - kubectl rollout restart deployment/grafana
+    - kubectl rollout status deployment/grafana
+    - kubectl rollout restart deployment/prometheus
+    - kubectl rollout status deployment/prometheus
