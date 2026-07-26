@@ -42,3 +42,9 @@ Added - **auth**: Implemented Refresh Token storage in Redis with automatic TTL 
 
 - feature/auth-006-add-prometheus-grafana-monitoring
 - add Prometheus and Grafana deployments
+
+
+### Added
+
+- feature/auth-007-tests
+- add tests for auth service generate Token
